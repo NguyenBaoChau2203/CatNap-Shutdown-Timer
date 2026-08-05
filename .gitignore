@@ -1,0 +1,15 @@
+# Generated release artifacts
+*.zip
+
+# Runtime and diagnostic files
+*.log
+*_log.txt
+*.tmp
+
+# Local IDE settings
+.vscode/
+.idea/
+
+# Windows shell metadata
+Thumbs.db
+Desktop.ini
