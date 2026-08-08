@@ -45,12 +45,36 @@ Assert-Throws { ConvertTo-ShutdownSeconds -Amount 169 -Unit Hours } 'More than s
 Assert-Equal '/s /f /t 900 /d p:0:0 /c "Hen gio tat may"' (New-ShutdownArguments -Seconds 900) 'Arguments only contain the validated delay'
 Assert-Throws { New-ShutdownArguments -Seconds 0 } 'Zero seconds is rejected for a schedule'
 
-Assert-Equal $true (Test-ShutdownScheduleReplacement -AbortExitCode 0) 'Abort exit code 0 allows creating a new schedule'
-Assert-Equal $true (Test-ShutdownScheduleReplacement -AbortExitCode 1116) 'Abort exit code 1116 (no pending schedule) allows creating a new schedule'
-Assert-Equal $false (Test-ShutdownScheduleReplacement -AbortExitCode 5) 'Other abort exit codes block creating a new schedule'
-Assert-Equal $false (Test-ShutdownScheduleReplacement -AbortExitCode 87) 'Access-denied abort exit code blocks creating a new schedule'
+$abortOk = Get-ShutdownFlowTransition -CompletedAction Abort -ExitCode 0 -IsReplacement $true -RequestedSeconds 900
+Assert-Equal 'Schedule' $abortOk.Decision 'Abort exit 0 in a replacement chains to Schedule'
+Assert-Equal 900 $abortOk.Seconds 'The requested seconds are carried into the next schedule'
+Assert-Equal $true $abortOk.IsBusy 'The UI stays busy after a successful abort'
+Assert-Equal 'InProgress' $abortOk.Outcome 'No success is reported before the schedule completes'
 
-Assert-Equal $true (Test-ShutdownScheduleAccepted -ExitCode 0) 'Schedule exit code 0 means the new schedule was created'
-Assert-Equal $false (Test-ShutdownScheduleAccepted -ExitCode 5) 'A non-zero schedule exit code means creation failed'
+$abortEmpty = Get-ShutdownFlowTransition -CompletedAction Abort -ExitCode 1116 -IsReplacement $true -RequestedSeconds 900
+Assert-Equal 'Schedule' $abortEmpty.Decision 'Abort exit 1116 (no pending schedule) still chains to Schedule'
+Assert-Equal $true $abortEmpty.IsBusy 'The UI stays busy after abort exit 1116'
+Assert-Equal 900 $abortEmpty.Seconds 'Abort exit 1116 also carries the requested seconds'
+
+$abortFail = Get-ShutdownFlowTransition -CompletedAction Abort -ExitCode 5 -IsReplacement $true -RequestedSeconds 900
+Assert-Equal 'Fail' $abortFail.Decision 'A failing abort does not chain to Schedule'
+Assert-Equal $false $abortFail.IsBusy 'A failing abort ends the busy state'
+Assert-Equal 'Failed' $abortFail.Outcome 'A failing abort ends with an error outcome'
+
+$scheduleOk = Get-ShutdownFlowTransition -CompletedAction Schedule -ExitCode 0 -IsReplacement $false -RequestedSeconds 900
+Assert-Equal 'Complete' $scheduleOk.Decision 'A successful schedule completes the flow'
+Assert-Equal $false $scheduleOk.IsBusy 'A successful schedule unlocks the UI'
+Assert-Equal 'Succeeded' $scheduleOk.Outcome 'Success is only reported after the schedule exits 0'
+
+$scheduleFail = Get-ShutdownFlowTransition -CompletedAction Schedule -ExitCode 5 -IsReplacement $false -RequestedSeconds 900
+Assert-Equal 'Fail' $scheduleFail.Decision 'A failing schedule ends the flow with failure'
+Assert-Equal $false $scheduleFail.IsBusy 'A failing schedule unlocks the UI'
+Assert-Equal 'Failed' $scheduleFail.Outcome 'A failing schedule is never reported as success'
+
+foreach ($code in 0, 1116, 87) {
+    $standalone = Get-ShutdownFlowTransition -CompletedAction Abort -ExitCode $code -IsReplacement $false -RequestedSeconds 900
+    Assert-Equal 'Complete' $standalone.Decision "A standalone cancel (exit $code) completes the flow without chaining to Schedule"
+    Assert-Equal $false $standalone.IsBusy 'A standalone cancel ends the busy state'
+}
 
 Write-Host "PASS: $script:TestCount assertions completed."

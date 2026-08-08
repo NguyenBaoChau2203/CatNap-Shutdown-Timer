@@ -36,20 +36,64 @@ function New-ShutdownArguments {
     return ('/s /f /t {0} /d p:0:0 /c "Hen gio tat may"' -f $Seconds)
 }
 
-function Test-ShutdownScheduleReplacement {
+function Get-ShutdownFlowTransition {
     param(
-        [Parameter(Mandatory = $true)] [int] $AbortExitCode
+        [Parameter(Mandatory = $true)] [ValidateSet('Schedule', 'Abort')] [string] $CompletedAction,
+        [Parameter(Mandatory = $true)] [int] $ExitCode,
+        [Parameter(Mandatory = $true)] [bool] $IsReplacement,
+        [Parameter(Mandatory = $true)] [Int64] $RequestedSeconds
     )
 
-    return ($AbortExitCode -eq 0 -or $AbortExitCode -eq 1116)
-}
+    if ($CompletedAction -eq 'Abort' -and $IsReplacement) {
+        if ($ExitCode -eq 0 -or $ExitCode -eq 1116) {
+            return [PSCustomObject]@{
+                Decision = 'Schedule'
+                Seconds  = $RequestedSeconds
+                IsBusy   = $true
+                Outcome  = 'InProgress'
+            }
+        }
+        return [PSCustomObject]@{
+            Decision = 'Fail'
+            Seconds  = 0
+            IsBusy   = $false
+            Outcome  = 'Failed'
+        }
+    }
 
-function Test-ShutdownScheduleAccepted {
-    param(
-        [Parameter(Mandatory = $true)] [int] $ExitCode
-    )
+    if ($CompletedAction -eq 'Schedule') {
+        if ($ExitCode -eq 0) {
+            return [PSCustomObject]@{
+                Decision = 'Complete'
+                Seconds  = 0
+                IsBusy   = $false
+                Outcome  = 'Succeeded'
+            }
+        }
+        return [PSCustomObject]@{
+            Decision = 'Fail'
+            Seconds  = 0
+            IsBusy   = $false
+            Outcome  = 'Failed'
+        }
+    }
 
-    return ($ExitCode -eq 0)
+    if ($ExitCode -eq 0) {
+        $outcome = 'Succeeded'
+    }
+    elseif ($ExitCode -eq 1116) {
+        $outcome = 'Finished'
+    }
+    else {
+        $outcome = 'Failed'
+    }
+
+    return [PSCustomObject]@{
+        Decision = 'Complete'
+        Seconds  = 0
+        IsBusy   = $false
+        Outcome  = $outcome
+    }
 }
 
 function Get-ShutdownExecutablePath {
@@ -97,4 +141,4 @@ function Start-ShutdownCommand {
     }
 }
 
-Export-ModuleMember -Function ConvertTo-ShutdownSeconds, New-ShutdownArguments, Start-ShutdownCommand, Test-ShutdownScheduleReplacement, Test-ShutdownScheduleAccepted
+Export-ModuleMember -Function ConvertTo-ShutdownSeconds, New-ShutdownArguments, Start-ShutdownCommand, Get-ShutdownFlowTransition
