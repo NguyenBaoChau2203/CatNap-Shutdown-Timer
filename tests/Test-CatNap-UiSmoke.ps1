@@ -58,11 +58,13 @@ try {
     $quick15 = Find-ElementByName -Parent $window -Name '15 phút'
     $startButton = Find-ElementByName -Parent $window -Name 'BẮT ĐẦU HẸN GIỜ'
     $cancelButton = Find-ElementByName -Parent $window -Name 'HỦY LỊCH'
+    $statusLabel = Find-ElementByName -Parent $window -Name 'Chưa có lịch tắt máy. Mèo con đang chờ lệnh.'
 
     Assert-True ($null -ne $numberInput) 'The default time input is visible'
     Assert-True ($null -ne $quick15) 'The quick 15-minute button is visible'
     Assert-True ($null -ne $startButton) 'The schedule button is visible'
     Assert-True ($null -ne $cancelButton) 'The cancel button is visible'
+    Assert-True ($null -ne $statusLabel) 'The status label is visible'
 
     [void]$process.CloseMainWindow()
     Assert-True ($process.WaitForExit(5000)) 'The application closes cleanly while idle'
