@@ -36,6 +36,22 @@ function New-ShutdownArguments {
     return ('/s /f /t {0} /d p:0:0 /c "Hen gio tat may"' -f $Seconds)
 }
 
+function Test-ShutdownScheduleReplacement {
+    param(
+        [Parameter(Mandatory = $true)] [int] $AbortExitCode
+    )
+
+    return ($AbortExitCode -eq 0 -or $AbortExitCode -eq 1116)
+}
+
+function Test-ShutdownScheduleAccepted {
+    param(
+        [Parameter(Mandatory = $true)] [int] $ExitCode
+    )
+
+    return ($ExitCode -eq 0)
+}
+
 function Get-ShutdownExecutablePath {
     $systemDirectory = [Environment]::GetFolderPath([Environment+SpecialFolder]::System)
     $shutdownPath = Join-Path -Path $systemDirectory -ChildPath 'shutdown.exe'
@@ -81,4 +97,4 @@ function Start-ShutdownCommand {
     }
 }
 
-Export-ModuleMember -Function ConvertTo-ShutdownSeconds, New-ShutdownArguments, Start-ShutdownCommand
+Export-ModuleMember -Function ConvertTo-ShutdownSeconds, New-ShutdownArguments, Start-ShutdownCommand, Test-ShutdownScheduleReplacement, Test-ShutdownScheduleAccepted

@@ -11,6 +11,7 @@ $script:isBusy = $false
 $script:pendingAction = $null
 $script:pendingProcess = $null
 $script:operationStopwatch = $null
+$script:pendingReplacement = $false
 $script:ownedFonts = New-Object System.Collections.Generic.List[System.Drawing.Font]
 
 function New-AppFont {
@@ -278,6 +279,7 @@ function Clear-PendingOperation {
     $process = $script:pendingProcess
     $script:pendingProcess = $null
     $script:pendingAction = $null
+    $script:pendingReplacement = $false
 
     if ($script:operationStopwatch) {
         $script:operationStopwatch.Stop()
@@ -293,11 +295,12 @@ function Complete-Operation {
     param([Parameter(Mandatory = $true)] [int] $ExitCode)
 
     $action = $script:pendingAction
+    $wasReplacing = $script:pendingReplacement
     Clear-PendingOperation
-    Set-BusyUi $false
 
     if ($action -eq 'Schedule') {
-        if ($ExitCode -eq 0) {
+        if (Test-ShutdownScheduleAccepted -ExitCode $ExitCode) {
+            Set-BusyUi $false
             $target = (Get-Date).AddSeconds($script:requestedSeconds)
             $targetText = $target.ToString('HH:mm - dd/MM/yyyy')
             Set-Status '😺' "Đã hẹn tắt máy lúc $targetText.`nBạn có thể đóng cửa sổ này." $cSuccess
@@ -310,10 +313,11 @@ function Complete-Operation {
             )
         }
         else {
+            Set-BusyUi $false
             Set-Status '😿' "Windows không tạo lịch mới (mã $ExitCode)." $cError
             [void][System.Windows.Forms.MessageBox]::Show(
                 $form,
-                "Windows không tạo được lịch tắt máy (mã $ExitCode).`nNếu máy đã có lịch khác, hãy bấm HỦY LỊCH trước khi thử lại.",
+                "Windows không tạo được lịch tắt máy (mã $ExitCode).`nLịch cũ đã được hủy và lịch mới chưa được tạo. Hãy thử lại.",
                 'Không thể hẹn giờ',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error
@@ -321,6 +325,25 @@ function Complete-Operation {
         }
         return
     }
+
+    if ($wasReplacing) {
+        if (Test-ShutdownScheduleReplacement -AbortExitCode $ExitCode) {
+            Start-Operation -Action Schedule -Seconds $script:requestedSeconds -StatusMessage 'Lịch cũ đã được hủy. Đang tạo lịch mới…'
+            return
+        }
+        Set-BusyUi $false
+        Set-Status '😿' "Windows không hủy được lịch cũ (mã $ExitCode). Lịch mới chưa được tạo." $cError
+        [void][System.Windows.Forms.MessageBox]::Show(
+            $form,
+            "Windows không hủy được lịch tắt máy cũ (mã $ExitCode).`nLịch tắt máy đang chờ vẫn còn hiệu lực và lịch mới chưa được tạo.",
+            'Không thể đặt lại lịch',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        )
+        return
+    }
+
+    Set-BusyUi $false
 
     if ($ExitCode -eq 0) {
         Set-Status '😸' 'Đã hủy lịch tắt máy đang chờ.' $cSuccess
@@ -394,11 +417,12 @@ $operationTimer.Add_Tick({
 function Start-Operation {
     param(
         [Parameter(Mandatory = $true)] [ValidateSet('Schedule', 'Abort')] [string] $Action,
-        [Int64] $Seconds = 0
+        [Int64] $Seconds = 0,
+        [string] $StatusMessage = 'Đang gửi lệnh tới Windows…'
     )
 
     Set-BusyUi $true
-    Set-Status '🐾' 'Đang gửi lệnh tới Windows…' $cMuted
+    Set-Status '🐾' $StatusMessage $cMuted
     $script:pendingAction = $Action
 
     try {
@@ -409,6 +433,14 @@ function Start-Operation {
     catch {
         Fail-PendingOperation "Không thể gửi lệnh tới Windows: $($_.Exception.Message)"
     }
+}
+
+function Start-ScheduleReplacement {
+    param([Parameter(Mandatory = $true)] [Int64] $Seconds)
+
+    $script:requestedSeconds = $Seconds
+    $script:pendingReplacement = $true
+    Start-Operation -Action Abort -StatusMessage 'Đang hủy lịch cũ để tạo lịch mới…'
 }
 
 $startButton.Add_Click({
@@ -423,7 +455,7 @@ $startButton.Add_Click({
 
         $confirmation = [System.Windows.Forms.MessageBox]::Show(
             $form,
-            "Hẹn tắt máy sau $description?`n`nKhi đến giờ, Windows sẽ đóng game và ứng dụng đang chạy. Hãy chắc rằng bạn không có dữ liệu chưa lưu.",
+            "Hẹn tắt máy sau $description?`n`nLịch tắt máy đang chờ hiện có (kể cả lịch do ứng dụng khác tạo) sẽ được thay thế bằng lịch mới.`nKhi đến giờ, Windows sẽ đóng game và ứng dụng đang chạy. Hãy chắc rằng bạn không có dữ liệu chưa lưu.",
             'Xác nhận hẹn giờ',
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
             [System.Windows.Forms.MessageBoxIcon]::Warning,
@@ -431,8 +463,7 @@ $startButton.Add_Click({
         )
 
         if ($confirmation -eq [System.Windows.Forms.DialogResult]::Yes) {
-            $script:requestedSeconds = $seconds
-            Start-Operation -Action Schedule -Seconds $seconds
+            Start-ScheduleReplacement -Seconds $seconds
         }
     }
     catch {

@@ -45,4 +45,12 @@ Assert-Throws { ConvertTo-ShutdownSeconds -Amount 169 -Unit Hours } 'More than s
 Assert-Equal '/s /f /t 900 /d p:0:0 /c "Hen gio tat may"' (New-ShutdownArguments -Seconds 900) 'Arguments only contain the validated delay'
 Assert-Throws { New-ShutdownArguments -Seconds 0 } 'Zero seconds is rejected for a schedule'
 
+Assert-Equal $true (Test-ShutdownScheduleReplacement -AbortExitCode 0) 'Abort exit code 0 allows creating a new schedule'
+Assert-Equal $true (Test-ShutdownScheduleReplacement -AbortExitCode 1116) 'Abort exit code 1116 (no pending schedule) allows creating a new schedule'
+Assert-Equal $false (Test-ShutdownScheduleReplacement -AbortExitCode 5) 'Other abort exit codes block creating a new schedule'
+Assert-Equal $false (Test-ShutdownScheduleReplacement -AbortExitCode 87) 'Access-denied abort exit code blocks creating a new schedule'
+
+Assert-Equal $true (Test-ShutdownScheduleAccepted -ExitCode 0) 'Schedule exit code 0 means the new schedule was created'
+Assert-Equal $false (Test-ShutdownScheduleAccepted -ExitCode 5) 'A non-zero schedule exit code means creation failed'
+
 Write-Host "PASS: $script:TestCount assertions completed."
