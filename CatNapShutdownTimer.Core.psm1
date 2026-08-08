@@ -96,6 +96,34 @@ function Get-ShutdownFlowTransition {
     }
 }
 
+function Invoke-ShutdownFlowTransition {
+    param(
+        [Parameter(Mandatory = $true)] [ValidateSet('Schedule', 'Abort')] [string] $CompletedAction,
+        [Parameter(Mandatory = $true)] [int] $ExitCode,
+        [Parameter(Mandatory = $true)] [bool] $IsReplacement,
+        [Parameter(Mandatory = $true)] [Int64] $RequestedSeconds,
+        [Parameter(Mandatory = $true)] [scriptblock] $SetBusy,
+        [Parameter(Mandatory = $true)] [scriptblock] $StartSchedule,
+        [Parameter(Mandatory = $true)] [scriptblock] $Complete
+    )
+
+    $transition = Get-ShutdownFlowTransition `
+        -CompletedAction $CompletedAction `
+        -ExitCode $ExitCode `
+        -IsReplacement $IsReplacement `
+        -RequestedSeconds $RequestedSeconds
+
+    [void](& $SetBusy $transition.IsBusy)
+    if ($transition.Decision -eq 'Schedule') {
+        [void](& $StartSchedule $transition.Seconds)
+    }
+    else {
+        [void](& $Complete $transition)
+    }
+
+    return $transition
+}
+
 function Get-ShutdownExecutablePath {
     $systemDirectory = [Environment]::GetFolderPath([Environment+SpecialFolder]::System)
     $shutdownPath = Join-Path -Path $systemDirectory -ChildPath 'shutdown.exe'
@@ -141,4 +169,4 @@ function Start-ShutdownCommand {
     }
 }
 
-Export-ModuleMember -Function ConvertTo-ShutdownSeconds, New-ShutdownArguments, Start-ShutdownCommand, Get-ShutdownFlowTransition
+Export-ModuleMember -Function ConvertTo-ShutdownSeconds, New-ShutdownArguments, Start-ShutdownCommand, Get-ShutdownFlowTransition, Invoke-ShutdownFlowTransition
