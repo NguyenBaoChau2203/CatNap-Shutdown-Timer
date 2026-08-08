@@ -291,24 +291,16 @@ function Clear-PendingOperation {
     }
 }
 
-function Complete-Operation {
-    param([Parameter(Mandatory = $true)] [int] $ExitCode)
+function Complete-ShutdownFlowTerminal {
+    param(
+        [Parameter(Mandatory = $true)] [ValidateSet('Schedule', 'Abort')] [string] $Action,
+        [Parameter(Mandatory = $true)] [int] $ExitCode,
+        [Parameter(Mandatory = $true)] [bool] $WasReplacing,
+        [Parameter(Mandatory = $true)] [ValidateSet('Succeeded', 'Finished', 'Failed')] [string] $Outcome
+    )
 
-    $action = $script:pendingAction
-    $wasReplacing = $script:pendingReplacement
-    Clear-PendingOperation
-
-    $decision = Get-ShutdownFlowTransition -CompletedAction $action -ExitCode $ExitCode -IsReplacement $wasReplacing -RequestedSeconds $script:requestedSeconds
-
-    if ($decision.Decision -eq 'Schedule') {
-        Start-Operation -Action Schedule -Seconds $decision.Seconds -StatusMessage 'Đang tạo lịch tắt máy mới…'
-        return
-    }
-
-    Set-BusyUi $false
-
-    if ($decision.Decision -eq 'Fail') {
-        if ($action -eq 'Schedule') {
+    if ($Outcome -eq 'Failed') {
+        if ($Action -eq 'Schedule') {
             Set-Status '😿' "Windows không tạo lịch mới (mã $ExitCode)." $cError
             [void][System.Windows.Forms.MessageBox]::Show(
                 $form,
@@ -318,7 +310,7 @@ function Complete-Operation {
                 [System.Windows.Forms.MessageBoxIcon]::Error
             )
         }
-        else {
+        elseif ($WasReplacing) {
             Set-Status '😿' "Windows không hủy được lịch cũ (mã $ExitCode). Lịch mới chưa được tạo." $cError
             [void][System.Windows.Forms.MessageBox]::Show(
                 $form,
@@ -328,10 +320,20 @@ function Complete-Operation {
                 [System.Windows.Forms.MessageBoxIcon]::Error
             )
         }
+        else {
+            Set-Status '😿' "Windows không hủy được lịch (mã $ExitCode)." $cError
+            [void][System.Windows.Forms.MessageBox]::Show(
+                $form,
+                "Windows không hủy được lịch tắt máy (mã $ExitCode).",
+                'Không thể hủy lịch',
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
+        }
         return
     }
 
-    if ($action -eq 'Schedule') {
+    if ($Action -eq 'Schedule') {
         $target = (Get-Date).AddSeconds($script:requestedSeconds)
         $targetText = $target.ToString('HH:mm - dd/MM/yyyy')
         Set-Status '😺' "Đã hẹn tắt máy lúc $targetText.`nBạn có thể đóng cửa sổ này." $cSuccess
@@ -345,7 +347,7 @@ function Complete-Operation {
         return
     }
 
-    if ($ExitCode -eq 0) {
+    if ($Outcome -eq 'Succeeded') {
         Set-Status '😸' 'Đã hủy lịch tắt máy đang chờ.' $cSuccess
         [void][System.Windows.Forms.MessageBox]::Show(
             $form,
@@ -355,7 +357,7 @@ function Complete-Operation {
             [System.Windows.Forms.MessageBoxIcon]::Information
         )
     }
-    elseif ($ExitCode -eq 1116) {
+    else {
         Set-Status '🐱' 'Hiện không có lịch tắt máy nào để hủy.' $cMuted
         [void][System.Windows.Forms.MessageBox]::Show(
             $form,
@@ -365,16 +367,33 @@ function Complete-Operation {
             [System.Windows.Forms.MessageBoxIcon]::Information
         )
     }
-    else {
-        Set-Status '😿' "Windows không hủy được lịch (mã $ExitCode)." $cError
-        [void][System.Windows.Forms.MessageBox]::Show(
-            $form,
-            "Windows không hủy được lịch tắt máy (mã $ExitCode).",
-            'Không thể hủy lịch',
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error
-        )
-    }
+}
+
+function Complete-Operation {
+    param([Parameter(Mandatory = $true)] [int] $ExitCode)
+
+    $action = $script:pendingAction
+    $wasReplacing = $script:pendingReplacement
+    Clear-PendingOperation
+
+    $setBusy = { param([bool] $Busy); Set-BusyUi $Busy }.GetNewClosure()
+    $startSchedule = {
+        param([Int64] $Seconds)
+        Start-Operation -Action Schedule -Seconds $Seconds -StatusMessage 'Đang tạo lịch tắt máy mới…'
+    }.GetNewClosure()
+    $complete = {
+        param($Transition)
+        Complete-ShutdownFlowTerminal -Action $action -ExitCode $ExitCode -WasReplacing $wasReplacing -Outcome $Transition.Outcome
+    }.GetNewClosure()
+
+    [void](Invoke-ShutdownFlowTransition `
+        -CompletedAction $action `
+        -ExitCode $ExitCode `
+        -IsReplacement $wasReplacing `
+        -RequestedSeconds $script:requestedSeconds `
+        -SetBusy $setBusy `
+        -StartSchedule $startSchedule `
+        -Complete $complete)
 }
 
 function Fail-PendingOperation {

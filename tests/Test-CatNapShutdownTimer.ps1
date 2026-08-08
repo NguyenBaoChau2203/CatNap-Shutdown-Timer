@@ -77,4 +77,34 @@ foreach ($code in 0, 1116, 87) {
     Assert-Equal $false $standalone.IsBusy 'A standalone cancel ends the busy state'
 }
 
+function Invoke-TestFlowAdapter {
+    param(
+        [Parameter(Mandatory = $true)] [string] $CompletedAction,
+        [Parameter(Mandatory = $true)] [int] $ExitCode,
+        [Parameter(Mandatory = $true)] [bool] $IsReplacement
+    )
+
+    $events = New-Object System.Collections.Generic.List[string]
+    $setBusy = { param([bool] $Busy); $events.Add("Busy:$Busy") }.GetNewClosure()
+    $startSchedule = { param([Int64] $Seconds); $events.Add("Schedule:$Seconds") }.GetNewClosure()
+    $complete = { param($Transition); $events.Add("Terminal:$($Transition.Outcome)") }.GetNewClosure()
+
+    [void](Invoke-ShutdownFlowTransition `
+        -CompletedAction $CompletedAction `
+        -ExitCode $ExitCode `
+        -IsReplacement $IsReplacement `
+        -RequestedSeconds 900 `
+        -SetBusy $setBusy `
+        -StartSchedule $startSchedule `
+        -Complete $complete)
+
+    return ($events -join ',')
+}
+
+Assert-Equal 'Busy:True,Schedule:900' (Invoke-TestFlowAdapter -CompletedAction Abort -ExitCode 0 -IsReplacement $true) 'The adapter keeps the UI busy before chaining Abort 0 to Schedule'
+Assert-Equal 'Busy:True,Schedule:900' (Invoke-TestFlowAdapter -CompletedAction Abort -ExitCode 1116 -IsReplacement $true) 'The adapter keeps the UI busy before chaining Abort 1116 to Schedule'
+Assert-Equal 'Busy:False,Terminal:Failed' (Invoke-TestFlowAdapter -CompletedAction Abort -ExitCode 5 -IsReplacement $true) 'The adapter unlocks and reports a failed replacement abort'
+Assert-Equal 'Busy:False,Terminal:Succeeded' (Invoke-TestFlowAdapter -CompletedAction Schedule -ExitCode 0 -IsReplacement $false) 'The adapter reports success only after Schedule exits 0'
+Assert-Equal 'Busy:False,Terminal:Failed' (Invoke-TestFlowAdapter -CompletedAction Schedule -ExitCode 5 -IsReplacement $false) 'The adapter unlocks and reports a failed schedule'
+
 Write-Host "PASS: $script:TestCount assertions completed."
