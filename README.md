@@ -13,6 +13,7 @@ CatNap Shutdown Timer gives Windows a pending shutdown schedule through the nati
 - Minutes and hours, with quick presets for 15 minutes, 30 minutes, 1 hour, and 2 hours.
 - Input validation with a seven-day maximum.
 - Explicit confirmation before scheduling or cancelling a Windows shutdown.
+- A new schedule automatically replaces any pending Windows shutdown schedule, even one created by another app — no need to cancel it first.
 - UI-safe process polling so the window does not block while `shutdown.exe` responds.
 - No external PowerShell modules or third-party dependencies.
 - PowerShell 5.1-compatible UTF-8 source files.
@@ -33,10 +34,20 @@ CatNap Shutdown Timer gives Windows a pending shutdown schedule through the nati
 
 2. Double-click `Start-CatNapShutdownTimer.bat`.
 3. Enter a duration or choose a quick preset.
-4. Review the warning and select **Yes**.
+4. Review the warning and select **Yes**. Any pending shutdown schedule on the machine is replaced by the new one.
 5. Close the window if desired; Windows retains the pending shutdown.
 
 To cancel a pending shutdown, open the app again, select **HỦY LỊCH**, and confirm. The cancel command affects the pending Windows shutdown on that machine, even if another program created it.
+
+## Scheduling over an existing schedule
+
+When you confirm a new time, CatNap first asks Windows to cancel any pending shutdown with `shutdown.exe /a`, then creates the new schedule:
+
+- Abort succeeds (exit code `0`): the new schedule is created immediately.
+- No schedule was pending (exit code `1116`): treated as success, the new schedule is created.
+- Any other abort error: the flow stops, the old schedule stays in effect, and the app shows the error instead of creating a new schedule.
+
+The UI stays responsive and the input controls stay locked until the whole cancel-then-schedule sequence finishes. The success message is only shown after Windows actually accepts the new schedule.
 
 ## Run from PowerShell
 
@@ -49,14 +60,15 @@ The BAT launcher is recommended because it keeps the required files together and
 ## How it works
 
 1. The UI validates a positive whole-number duration and converts it to seconds.
-2. The core module builds a fixed command containing only that validated number:
+2. If any shutdown schedule is pending, the app runs `shutdown.exe /a` first and, if that succeeds (exit code `0`) or reports no pending schedule (exit code `1116`), the flow continues; any other abort error stops the flow.
+3. The core module builds a fixed command containing only that validated number:
 
    ```text
    shutdown.exe /s /f /t <seconds> /d p:0:0 /c "Hen gio tat may"
    ```
 
-3. A short WinForms timer observes the native process without blocking the interface.
-4. Windows owns the actual countdown, so closing CatNap does not cancel a successful schedule.
+4. A short WinForms timer observes the native process without blocking the interface.
+5. Windows owns the actual countdown, so closing CatNap does not cancel a successful schedule.
 
 The `/f` behavior is intentional for unattended game sessions. It can discard unsaved application data. See the [Microsoft shutdown command documentation](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/shutdown) for the platform behavior.
 
@@ -74,7 +86,7 @@ Run the idle UI smoke test:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File .\tests\Test-CatNap-UiSmoke.ps1
 ```
 
-The tests never execute a real shutdown command. They cover duration conversion, boundaries, command construction, parser compatibility, UI startup, visible controls, and clean idle close.
+The tests never execute a real shutdown command. They cover duration conversion, boundaries, command construction, the cancel-then-schedule replacement decision, parser compatibility, UI startup, visible controls, and clean idle close.
 
 ## Project layout
 
@@ -93,7 +105,7 @@ The tests never execute a real shutdown command. They cover duration conversion,
 ## Troubleshooting
 
 - **The app does not open:** confirm all three runtime files are in the same folder and try the BAT launcher again.
-- **Windows rejects the schedule:** read the displayed exit code. A pending schedule or a local policy may require cancelling the existing schedule first.
+- **Windows rejects the schedule:** read the displayed exit code. If aborting the old schedule failed, the old schedule stays in effect; if the new schedule itself failed after a successful abort, the machine is left without a pending schedule and you can try again.
 - **The cancel button says there is no schedule:** Windows currently has no pending shutdown to cancel.
 - **Do I need Administrator rights?** Usually no. The relevant requirement is the Windows “Shut down the system” user right.
 
@@ -122,6 +134,7 @@ CatNap Shutdown Timer giao lịch tắt máy cho `shutdown.exe` có sẵn trong 
 - Chọn phút/giờ, có nút nhanh 15 phút, 30 phút, 1 giờ và 2 giờ.
 - Kiểm tra đầu vào, giới hạn tối đa 7 ngày.
 - Xác nhận rõ ràng trước khi hẹn hoặc hủy lịch.
+- Lịch mới tự động thay thế lịch tắt máy Windows đang chờ, kể cả lịch do ứng dụng khác tạo — không cần tự hủy lịch cũ trước.
 - Theo dõi tiến trình không chặn giao diện.
 - Không cần module PowerShell ngoài hay thư viện bên thứ ba.
 - Tương thích mã nguồn UTF-8 với Windows PowerShell 5.1.
@@ -131,10 +144,20 @@ CatNap Shutdown Timer giao lịch tắt máy cho `shutdown.exe` có sẵn trong 
 1. Để ba file sau cùng một thư mục: `Start-CatNapShutdownTimer.bat`, `CatNapShutdownTimer.ps1`, `CatNapShutdownTimer.Core.psm1`.
 2. Nhấp đúp `Start-CatNapShutdownTimer.bat`.
 3. Nhập thời gian hoặc chọn nút nhanh.
-4. Đọc cảnh báo và chọn **Yes**.
+4. Đọc cảnh báo và chọn **Yes**. Lịch tắt máy đang chờ trên máy sẽ được thay bằng lịch mới.
 5. Có thể đóng cửa sổ sau khi hẹn thành công.
 
 Muốn hủy lịch, mở lại ứng dụng, chọn **HỦY LỊCH** rồi xác nhận. Lệnh hủy tác động tới lịch tắt máy Windows đang chờ trên máy đó, kể cả khi chương trình khác tạo lịch.
+
+## Đặt lịch mới thay lịch cũ
+
+Khi bạn xác nhận thời gian mới, CatNap trước tiên yêu cầu Windows hủy lịch đang chờ bằng `shutdown.exe /a`, rồi mới tạo lịch mới:
+
+- Hủy thành công (mã `0`): lịch mới được tạo ngay.
+- Không có lịch nào đang chờ (mã `1116`): vẫn được coi là thành công và tiếp tục tạo lịch mới.
+- Lỗi hủy khác: dừng quy trình, lịch cũ giữ nguyên hiệu lực và ứng dụng hiển thị lỗi thay vì tạo lịch mới.
+
+Giao diện không bị đóng băng trong suốt chuỗi hủy → tạo mới, và các trường nhập bị khóa cho tới khi hoàn tất. Chỉ khi Windows thực sự chấp nhận lịch mới, ứng dụng mới thông báo thành công.
 
 ## Kiểm thử
 
@@ -143,7 +166,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-CatNapShutd
 powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File .\tests\Test-CatNap-UiSmoke.ps1
 ```
 
-Kiểm thử không gọi lệnh shutdown thật; chỉ kiểm tra validation, biên thời gian, đối số lệnh, parser, khởi động UI và đóng cửa sổ khi rảnh.
+Kiểm thử không gọi lệnh shutdown thật; chỉ kiểm tra validation, biên thời gian, đối số lệnh, quyết định hủy rồi đặt lại lịch, parser, khởi động UI và đóng cửa sổ khi rảnh.
 
 ## Báo cáo
 
