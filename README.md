@@ -1,5 +1,9 @@
 # CatNap Shutdown Timer 🐾
 
+<p align="center">
+  <img src="assets/CatNapShutdownTimer-Cat.png" alt="CatNap Shutdown Timer cat icon" width="220">
+</p>
+
 > A tiny, dependency-free Windows PowerShell timer for shutting down a PC after a gaming or idle session.
 
 CatNap Shutdown Timer gives Windows a pending shutdown schedule through the native `shutdown.exe` command. Once the schedule is accepted, you can close the small cat-themed window and Windows keeps the schedule running.
@@ -17,6 +21,7 @@ CatNap Shutdown Timer gives Windows a pending shutdown schedule through the nati
 - UI-safe process polling so the window does not block while `shutdown.exe` responds.
 - No external PowerShell modules or third-party dependencies.
 - PowerShell 5.1-compatible UTF-8 source files.
+- An optional cat-themed Desktop shortcut with a bundled multi-size Windows icon.
 
 ## Requirements
 
@@ -26,16 +31,19 @@ CatNap Shutdown Timer gives Windows a pending shutdown schedule through the nati
 
 ## Quick start
 
-1. Keep these three files in the same folder:
-
-   - `Start-CatNapShutdownTimer.bat`
-   - `CatNapShutdownTimer.ps1`
-   - `CatNapShutdownTimer.Core.psm1`
-
+1. Download the repository ZIP, extract it, and keep the complete folder together.
 2. Double-click `Start-CatNapShutdownTimer.bat`.
 3. Enter a duration or choose a quick preset.
 4. Review the warning and select **Yes**. Any pending shutdown schedule on the machine is replaced by the new one.
 5. Close the window if desired; Windows retains the pending shutdown.
+
+To create a **CatNap Shutdown Timer** shortcut on the Desktop with the bundled cat icon, run this once from the extracted folder:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Create-DesktopShortcut.ps1
+```
+
+The shortcut uses the current extracted folder. If you move that folder later, run the shortcut creator again.
 
 To cancel a pending shutdown, open the app again, select **HỦY LỊCH**, and confirm. The cancel command affects the pending Windows shutdown on that machine, even if another program created it.
 
@@ -86,7 +94,13 @@ Run the idle UI smoke test:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File .\tests\Test-CatNap-UiSmoke.ps1
 ```
 
-The tests never execute a real shutdown command. They cover duration conversion, boundaries, command construction, the cancel-then-schedule replacement decision, parser compatibility, UI startup, visible controls, and clean idle close.
+Run the Desktop shortcut integration test:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-CreateDesktopShortcut.ps1
+```
+
+The tests never execute a real shutdown command. They cover duration conversion, boundaries, command construction, the cancel-then-schedule replacement decision, parser compatibility, UI startup, visible controls, clean idle close, and the real Windows shortcut properties in an isolated temporary folder.
 
 ## Project layout
 
@@ -95,9 +109,14 @@ The tests never execute a real shutdown command. They cover duration conversion,
 ├── CatNapShutdownTimer.ps1          # WinForms UI and interaction flow
 ├── CatNapShutdownTimer.Core.psm1    # Validation and native command boundary
 ├── Start-CatNapShutdownTimer.bat    # Double-click launcher
+├── Create-DesktopShortcut.ps1       # Installs the cat-icon Desktop shortcut
+├── assets/
+│   ├── CatNapShutdownTimer-Cat.ico  # Multi-size Windows shortcut icon
+│   └── CatNapShutdownTimer-Cat.png  # Icon preview/source image
 ├── tests/
 │   ├── Test-CatNapShutdownTimer.ps1
-│   └── Test-CatNap-UiSmoke.ps1
+│   ├── Test-CatNap-UiSmoke.ps1
+│   └── Test-CreateDesktopShortcut.ps1
 ├── AUDIT_REPORT.md                  # Vietnamese audit and verification report
 └── README.md
 ```
@@ -105,6 +124,7 @@ The tests never execute a real shutdown command. They cover duration conversion,
 ## Troubleshooting
 
 - **The app does not open:** confirm all three runtime files are in the same folder and try the BAT launcher again.
+- **The Desktop shortcut stops working after moving the project:** run `Create-DesktopShortcut.ps1` again from the new folder.
 - **Windows rejects the schedule:** read the displayed exit code. If aborting the old schedule failed, the old schedule stays in effect; if the new schedule itself failed after a successful abort, the machine is left without a pending schedule and you can try again.
 - **The cancel button says there is no schedule:** Windows currently has no pending shutdown to cancel.
 - **Do I need Administrator rights?** Usually no. The relevant requirement is the Windows “Shut down the system” user right.
@@ -138,14 +158,23 @@ CatNap Shutdown Timer giao lịch tắt máy cho `shutdown.exe` có sẵn trong 
 - Theo dõi tiến trình không chặn giao diện.
 - Không cần module PowerShell ngoài hay thư viện bên thứ ba.
 - Tương thích mã nguồn UTF-8 với Windows PowerShell 5.1.
+- Có tùy chọn tạo shortcut ngoài Desktop với icon mèo nhiều kích thước dành cho Windows.
 
 ## Cách chạy nhanh
 
-1. Để ba file sau cùng một thư mục: `Start-CatNapShutdownTimer.bat`, `CatNapShutdownTimer.ps1`, `CatNapShutdownTimer.Core.psm1`.
+1. Tải file ZIP của repository, giải nén và giữ nguyên toàn bộ thư mục.
 2. Nhấp đúp `Start-CatNapShutdownTimer.bat`.
 3. Nhập thời gian hoặc chọn nút nhanh.
 4. Đọc cảnh báo và chọn **Yes**. Lịch tắt máy đang chờ trên máy sẽ được thay bằng lịch mới.
 5. Có thể đóng cửa sổ sau khi hẹn thành công.
+
+Để tạo shortcut **CatNap Shutdown Timer** ngoài Desktop với icon mèo, chạy lệnh sau một lần trong thư mục đã giải nén:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Create-DesktopShortcut.ps1
+```
+
+Shortcut sử dụng vị trí thư mục hiện tại. Nếu di chuyển thư mục sau này, hãy chạy lại script tạo shortcut.
 
 Muốn hủy lịch, mở lại ứng dụng, chọn **HỦY LỊCH** rồi xác nhận. Lệnh hủy tác động tới lịch tắt máy Windows đang chờ trên máy đó, kể cả khi chương trình khác tạo lịch.
 
@@ -164,9 +193,10 @@ Giao diện không bị đóng băng trong suốt chuỗi hủy → tạo mới,
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-CatNapShutdownTimer.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File .\tests\Test-CatNap-UiSmoke.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-CreateDesktopShortcut.ps1
 ```
 
-Kiểm thử không gọi lệnh shutdown thật; chỉ kiểm tra validation, biên thời gian, đối số lệnh, quyết định hủy rồi đặt lại lịch, parser, khởi động UI và đóng cửa sổ khi rảnh.
+Kiểm thử không gọi lệnh shutdown thật; chỉ kiểm tra validation, biên thời gian, đối số lệnh, quyết định hủy rồi đặt lại lịch, parser, khởi động UI, đóng cửa sổ khi rảnh và các thuộc tính shortcut Windows thật trong thư mục tạm cô lập.
 
 ## Báo cáo
 
